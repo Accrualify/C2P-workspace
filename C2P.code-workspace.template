@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"name": "Corpay-Playwright repo",
+			"path": "../../Accrualify/corpay-playwright"
+		},
+		{
+			"name": "Accrualify Test Automation repo",
+			"path": "../../Accrualify/accrualify-test-automation"
+		},
+		{
+			"name": "React repo",
+			"path": "../../Accrualify/accrualify-reactjs"
+		},
+		{
+			"name": "Component Library repo",
+			"path": "../../Accrualify/corpay-react-components-library"
+		},
+		{
+			"name": "C2P Workspace",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
