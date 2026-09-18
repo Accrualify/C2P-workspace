@@ -153,7 +153,7 @@ monitoring concern, not a precondition wired into scenario execution.
 Use this as the triage input. Do not port red tests without first deciding
 whether each is an app bug or a bad test.
 
-### 3.6 Grid state persists in localStorage — a hidden cross-test flake source
+### 3.6 Grid state persists in localStorage — a Cypress-only flake source
 
 `serverSideDataGrid.tsx` persists column state (visibility, order, width,
 filters) to localStorage under a per-grid key — `GRID_STORAGE_NAME = "listVendor"`
@@ -162,15 +162,24 @@ for the vendors grid.
 This explains an otherwise baffling Cypress pattern: `Vendors.search()` opens the
 quick-filters dropdown, clicks **reset grid**, reopens it, clicks **clear
 filters**, and only then types — on *every single search*. That is not test
-logic, it is compensation for grid state leaking between tests.
+logic, it is compensation for grid state leaking between tests. `cy.session`
+caches and restores localStorage, so writes from one test genuinely do reach the
+next.
 
-**This gets worse in Playwright, not better.** Once storage state is shared via
-`playwright/.auth/admin.json` (§4.2), persisted grid state is shared across every
-scenario in the run by default.
+**Playwright does not inherit this problem.** Each test gets a fresh browser
+context seeded from `playwright/.auth/admin.json`; localStorage writes during a
+test are held in that context and are **not** written back to the file. Grid
+state therefore cannot leak from one scenario to the next.
 
-Fix it once at the fixture level — clear the grid localStorage keys in a
-`Before` hook — rather than re-clicking reset inside every page object method.
-This belongs with the ag-Grid work in §4.4.
+So the reset-grid/clear-filters dance must **not** be ported. Drop it, and let
+each scenario start from whatever the storage-state file contains.
+
+**Residual risk worth guarding.** If `tests/setup/global.setup.ts` ever navigates
+to a grid page before snapshotting, grid keys get baked into `admin.json` and
+then apply to *every* scenario in *every* run — a silent, global, and very
+confusing failure. Today it only logs in, so this is safe; keep it that way, and
+have the ag-Grid component object (§4.4) assert a known column state rather than
+assuming a clean grid.
 
 ---
 
@@ -224,7 +233,7 @@ Deliverable:
 - Add `dependencies: ["setup"]` and `storageState: "playwright/.auth/admin.json"` to `chromium-bdd`.
 - Implement the `@authenticated` tag described in `AGENTS.md` § Authentication ("PR 2") so the login Given becomes a no-op when storage state is present.
 - Verify the state survives the Angular → React origin hop. `utils/storageStateAuth.ts` already decodes the `pod` claim out of the JWT, so the plumbing largely exists.
-- **Decide what to do about persisted grid state (§3.6)** — shared storage state means shared grid config unless explicitly cleared.
+- **Decide what to do about persisted grid state (§3.6)** — Playwright reseeds each context from the file, so no reset fixture is needed; just keep `global.setup.ts` away from grid pages.
 - Keep `tests/features/base/login.feature` running unauthenticated — it tests login itself.
 
 **Note:** `playwright.config.ts` is on the "requires explicit human confirmation"
@@ -288,8 +297,10 @@ Deliverable: one component object (suggested `pages/components/AgGrid.ts`) that:
   `header(colId)`, `filterBy(colId, text)`.
 - Wraps the quick-filter controls using the confirmed hooks:
   `quick-filters-button`, `quick-filters-reset`, `quick-filters-clear`.
-- **Owns the localStorage grid-state reset from §3.6**, exposed as a fixture-level
-  `Before` hook rather than a per-method click sequence.
+- **Owns the quick-filter controls**, using the confirmed hooks:
+  `quick-filters-button`, `quick-filters-reset`, `quick-filters-clear` — exposed
+  as explicit methods for scenarios that genuinely test filtering, **not** called
+  defensively before every search (see §3.6).
 
 The source repo has the equivalent behaviour concentrated in
 `cypress/e2e/step_definitions/ag_grid_steps.ts` and `grid_steps.ts`, so the
@@ -314,13 +325,13 @@ every agent run behaves identically:
 - **Stop conditions:**
   - Scenario needs an API client that does not exist yet → report and halt. Do not
     improvise UI-driven seeding.
-  - No stable hook exists for an element → **append it to the 0.6 audit list and
+  - No stable hook exists for an element → **append it to the §4.6 audit list and
     continue with the best available role/label selector.** Do not halt, and do
     not fall back to a positional or hashed-class selector.
 - Forbid porting `cy.wait(N)`, retry counters, and conditional `$body.find()`
   branching. Replace with Playwright auto-waiting and web-first assertions.
 
-### 4.6 Component-library and app test-hook audit *(parallel with 0.1–0.5)*
+### 4.6 Component-library and app test-hook audit *(parallel with 4.1–4.5)*
 
 The shared component library is in good shape and should be treated as the
 primary source of truth for component-level hooks.
@@ -354,7 +365,7 @@ primary source of truth for component-level hooks.
    as ground truth.
 
 Deliverable: a running list of missing hooks produced as a by-product of Phase 2
-(fed by the 0.5 stop condition), plus one batched upstream PR per repo rather
+(fed by the §4.5 stop condition), plus one batched upstream PR per repo rather
 than one PR per scenario.
 
 ---
@@ -474,7 +485,7 @@ Per pull request:
    `accrualify-reactjs` or `corpay-react-components-library`.** This is now
    mechanically checkable with a grep — make it a review checklist item, or
    automate it.
-7. Scenario passes with a cold grid state *and* with a polluted one (§3.6).
+7. Scenario passes on a cold run (no `playwright/.auth/admin.json`) *and* on a warm one, so the idempotent-login fallback stays exercised.
 
 Per phase:
 
@@ -529,6 +540,11 @@ Per phase:
    from the React app, and the Cypress suite creates vendors via UI. Needs a
    backend engineer's answer before slice 5 can start.
 
+3. **Vendor and user creation (blocking §6 slices 1 and 5).** Does `POST /vendors`
+   exist server-side? Is there any user-creation endpoint? Neither is reachable
+   from the React app, and the Cypress suite creates vendors via UI. Needs a
+   backend engineer's answer before slice 5 can start.
+
 4. **Multi-user / roles.** Cypress scenarios switch users mid-scenario
    (`I am logged in with the "<User>" user without creating a session`) and mutate
    roles via API. Storage-state auth is single-user by default. Needs a decision on
@@ -541,6 +557,13 @@ Per phase:
 6. **Companies under test.** Cypress hardcodes "Automation Client 1" and
    "Automation Client NVP" with different feature-flag and workflow expectations.
    Does the Playwright suite need the same multi-company matrix?
+
+7. **Component library version skew.** The library repo is at 1.2.2;
+   `accrualify-reactjs` consumes 1.2.3. Should the local clone be updated before
+   it is used as selector ground truth?
+
+8. **Angular repo.** `accrualify-angularjs` is not in the workspace. Add it, or
+   accept that Angular-side grounding stays on the remote `githubRepo` tool?
 
 7. **Component library version skew.** The library repo is at 1.2.2;
    `accrualify-reactjs` consumes 1.2.3. Should the local clone be updated before
