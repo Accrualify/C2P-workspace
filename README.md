@@ -2,28 +2,28 @@
 
 VS Code multi-root workspace for the Cypress → Playwright migration. Groups the four repos involved, plus this one.
 
-## Setup
+## Start here
 
-```bash
-cp C2P.code-workspace.template C2P.code-workspace
-code C2P.code-workspace
-```
+New to this? Follow [workspace-setup.md](workspace-setup.md) — it covers getting the repos, creating your workspace file, pointing it at your clones, and verifying the agent customizations loaded.
 
-`C2P.code-workspace` is gitignored. It is per-machine, and VS Code rewrites it whenever you add a folder or change a workspace setting — so edit yours freely, it will never turn up in `git status`.
+## Contents
 
-## Folder paths
+| Document | What it's for |
+| --- | --- |
+| [workspace-setup.md](workspace-setup.md) | Set up this workspace on your machine. Start here. |
+| [cypress-to-playwright-migration-plan.md](cypress-to-playwright-migration-plan.md) | **Strategy** — why the migration is shaped this way, what was found in each codebase, and (§0) exactly where things stand today. |
+| [migration-execution-plan.md](migration-execution-plan.md) | **Execution** — what to do next, in what order, and the exit gate for each stage. |
 
-The template uses paths relative to this repo and assumes all clones are siblings:
+Read them in that order. For the framework's own conventions, see `AGENTS.md` in the `corpay-playwright` repo.
 
-```
-repos/
-├── Accrualify/
-│   ├── accrualify-reactjs/
-│   ├── accrualify-test-automation/
-│   ├── corpay-playwright/
-│   └── corpay-react-components-library/
-└── dev/
-    └── C2P-workspace/   ← this repo
-```
+## The repos
 
-If your clones live elsewhere, edit the `folders[].path` values in your copy. Leave the `name` values alone — the `.github/copilot-instructions.md` and `AGENTS.md` files in the other repos refer to them by those labels.
+| Folder name in the workspace | Repo | Role |
+| --- | --- | --- |
+| `Corpay-Playwright repo` | `corpay-playwright` | Target — the Playwright framework |
+| `Accrualify Test Automation repo` | `accrualify-test-automation` | Source — the Cypress suite |
+| `React repo` | `accrualify-reactjs` | Grounding — `/ap/*` pages |
+| `Component Library repo` | `corpay-react-components-library` | Grounding — shared UI components |
+| `C2P Workspace` | this repo | Coordination and planning docs |
+
+The two grounding repos are what let selectors be found by local search instead of guessed. See [workspace-setup.md](workspace-setup.md#why-bother-with-a-multi-root-workspace).

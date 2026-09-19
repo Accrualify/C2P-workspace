@@ -1,10 +1,88 @@
 # Migration Plan: Accrualify Cypress suite → Corpay Playwright
 
-**Status:** Draft for review
-**Date:** 2026-09-16 (rev. 2 — grounding sources verified locally)
+**Status:** Phase 0 complete (not yet executed live)
+**Date:** 2026-09-19 (rev. 3 — progress recorded, blockers listed)
 **Source repo:** `accrualify-test-automation` (Cypress + cypress-cucumber-preprocessor)
 **Target repo:** `corpay-playwright` (Playwright + playwright-bdd)
 **Grounding repos:** `accrualify-reactjs`, `corpay-react-components-library`
+
+> **This document is the _strategy_ — why the migration is shaped this way.**
+> For the sequenced work from here to the finish line, see
+> [migration-execution-plan.md](migration-execution-plan.md).
+
+---
+
+## 0. Status — where we are right now
+
+> ⚠️ **Nothing in `corpay-playwright` has ever been executed against a live
+> environment.** There is no `.env` in the repo, so no scenario has ever run.
+> Every gate passed so far is **static**: `bddgen`, `tsc --noEmit`,
+> `prettier --check`, and `playwright test --list`. Read Phase 0 as
+> *"compiles and resolves"*, not *"works"*. Proving it works is Stage 0 of the
+> [execution plan](migration-execution-plan.md).
+
+| Phase | Item | Status |
+|---|---|---|
+| 0.1 | Agent instructions corrected for playwright-bdd | ✅ Done |
+| 0.2 | Storage-state auth wired into the BDD lane | ✅ Done |
+| 0.3 | API seeding layer | ◐ Foundation only |
+| 0.4 | Shared ag-Grid component object | ✅ Done |
+| 0.5 | Migration prompt | ✅ Done |
+| 0.6 | Component-library / app test-hook audit | ◐ Findings recorded, no PRs raised |
+| 1 | Triage inventory | ⬜ Not started |
+| 2 | Vertical slices (porting) | ⬜ Not started |
+| 3 | Hardening and cutover | ⬜ Not started |
+
+### What was built
+
+**0.1 — Agent instructions.** Seven files in `corpay-playwright` described
+**cucumber-js** (`CustomWorld`, `cucumber.js`, `tsconfig.cucumber.json`,
+`test:cucumber:*`), none of which exist. The repo runs **playwright-bdd**.
+Corrected: `AGENTS.md`, `.github/copilot-instructions.md`,
+`.github/agents/playwright-agent.agent.md`,
+`.github/instructions/cucumber-bdd.instructions.md`, and three prompt files.
+Left alone (already accurate): `page-objects.instructions.md`,
+`playwright-specs.instructions.md`, `new-api-client.prompt.md`.
+
+**0.2 — Auth.** The BDD suite now generates into two projects:
+`chromium-bdd` (tags `not @anonymous`, loads `playwright/.auth/admin.json`,
+`dependencies: ["setup"]`) and `chromium-bdd-anon` (tags `@anonymous`, blank
+storage state). `LoginPage.ensureLoggedIn()` makes the shared
+`Given I am logged in…` idempotent. Design note: this is **opt-out via
+`@anonymous`**, not the opt-in `@authenticated` originally sketched — default
+"authenticated" matches how every non-login feature already behaved, so it
+needed one tag on one feature instead of tagging everything.
+
+**0.3 — API seeding (foundation only).** `api/clients/apiClient.ts` base plus
+`invoiceClient`, `purchaseOrderClient`, `vendorClient`; `api/endpoints.ts`
+extended with paths read directly out of the React service layer; fixtures wired
+into both `tests/support/fixtures.ts` (BDD) and `fixtures/testBase.ts` (spec).
+**Payload shapes are unverified** — `create()` on invoices and POs needs a real
+request body captured from the app before it can be trusted. `vendorClient` has
+no `create()` on purpose (see §4.3).
+
+**0.4 — ag-Grid.** `pages/components/AgGrid.ts`, grounded on real hooks:
+`quick-filters-button|clear|reset`, `datagrid-floating-filter-<colId>-select`,
+and `col-id` from the column definitions.
+
+**0.5 — Migration prompt.** `.github/prompts/migrate-cypress-feature.prompt.md`
+encodes the porting contract, the §3.1 replacement table, the drop-list, and
+three stop conditions.
+
+> All of the above is **uncommitted** at time of writing — 17 modified files and
+> 3 new paths in `corpay-playwright`. Commit and push before anyone clones.
+
+### Open blockers
+
+| # | Blocker | Impact |
+|---|---|---|
+| 1 | No `.env` in `corpay-playwright` | Nothing has ever run. Everything below is unproven. |
+| 2 | CI runs `npm run test` with **no `bddgen` step** | `.features-gen/` never exists in CI, so **BDD scenarios have never run there**. Pre-existing; not caused by 0.2. |
+| 3 | `ngStorage-currentCompany` hydration wait is commented out at the end of `LoginPage.loginAsAdmin()` | `readStoredAuth()` reads that key for the company nonce. If it's genuinely required, `admin.json` lacks it and **every API seeding call 401s**. `ApiClient.assertCompanyScoped()` surfaces this as a clear error rather than a mystery. |
+| 4 | Does `POST /vendors` exist server-side? | The React app is PATCH-only and Cypress creates vendors through the UI. Blocks API seeding for the Vendors and Users slices. Needs a backend engineer. |
+| 5 | `npm run format` rewrites ~12 unrelated files | `prettier --write "**/*.{ts,json,md}"` reformats the whole repo (quote normalisation, not just whitespace). The repo was never Prettier-clean. Scope Prettier to changed files, or land one formatting-only commit first. |
+| 6 | **`.env.staging` vs `.env.stage`** | `.env.example` (lines 1, 6) and `Folder_Structure.md:110` say `staging`; every npm script and `playwright.config.ts` use `stage`. A `.env.staging` file **silently never loads**. |
+| 7 | `@vendorAddEdit` / `@invoiceAddEdit` | Legacy camelCase tags violating the repo's own kebab-case rule. Documented as "don't copy"; not renamed, because renaming changes tag filtering. |
 
 ---
 
@@ -13,10 +91,11 @@
 Port the suite agentically, but drive each port from the **`.feature` file as the
 specification** — not by transpiling the Cypress step definitions and page objects.
 
-A file-by-file translation would faithfully reproduce the existing flakiness,
-because the flakiness lives in the Cypress selector strategy and session
-handling, not in the Gherkin. The Gherkin is the asset worth keeping; almost
-everything below it should be rewritten against Playwright idioms.
+A file-by-file translation would carry the instability across, because it comes
+from the Cypress session layer and from selectors written against an app that
+exposed very few test hooks at the time — not from the Gherkin. The Gherkin is
+the asset worth keeping; almost everything below it should be rewritten against
+Playwright idioms.
 
 **The rewrite is tractable because the stable hooks already exist.** With the
 React app and the shared component library open locally, every major Cypress
@@ -84,15 +163,44 @@ Only step definitions, page objects, and the seeding layer need real work.
 | `support/page_objects/**` | `pages/web/admin/*Page.ts` extending `BasePage` | Medium — restructure + reground selectors |
 | `support/commands/**` (API seeding) | `api/clients/*Client.ts` + a Playwright fixture | **Largest gap — nothing exists yet** |
 
+### What the Cypress suite got right (and what carries forward)
+
+This migration is a **platform change, not a rewrite of bad work**. A large part
+of the Cypress suite is being carried over rather than replaced:
+
+| Asset | How it's used here |
+|---|---|
+| **The Gherkin itself** — 48 features, ~550 scenarios | The specification. Ports at close to 1:1 and is the single reason this migration is tractable rather than a from-scratch rebuild. |
+| Breadth of domain coverage | Payments, invoices, POs, credit memos, expenses, cards, approvals — years of encoded product knowledge that no amount of tooling replaces. |
+| `docs/tests_status.md` | A per-scenario pass/fail ledger. Becomes the primary Phase 1 triage input (§5). Most suites have nothing like it. |
+| `docs/self-heal-flaky-history.json` | Per-scenario flake signatures with timestamps — real diagnostic data, and how the auth root cause in §3.3 was identified at all. |
+| `docs/self-heal-known-issues.md` | A root-cause knowledge base keyed by failure signature. |
+| `scripts/self-heal/` | A working self-healing pipeline. `corpay-playwright/docs/self-healing-tests-plan.md` is explicitly modelled on it. |
+| API-first seeding instinct | ~130 of ~400 custom commands seed over REST rather than through the UI — exactly the right call, and the model for §4.3. |
+| Centralised `element_selectors/` | The correct instinct: one place to change when the app moves. The selectors inside are brittle because the app offered no stable hooks then, not because centralising was wrong. |
+| `@setupEnvironment` | Correctly identified environment drift as a top test-killer. The *mechanism* needs rework (§3.4); the insight was right and is preserved as a separate monitoring concern. |
+
+**The thing that changed is the application, not the standard of the testing.**
+The React app now carries 251 `data-testid` attributes across 59 files, and the
+shared component library forwards `data-testid` on 28 of 29 components. Almost
+none of that existed when the Cypress selectors were written. That delta — not
+test-writing quality — is what makes §3.1 possible today and impossible then.
+
 ---
 
 ## 3. Why a mechanical translation fails
 
-### 3.1 The selectors are exactly what the target repo forbids — and real replacements exist
+> The four causes below are **structural** — properties of Cypress, of the
+> application at the time, and of the environment the suite runs against. None
+> of them are fixed by writing the same tests more carefully; all of them are
+> fixed by the platform change. That is the case for migrating.
+
+### 3.1 The selectors target hooks that didn't exist yet — and now do
 
 From `cypress/support/element_selectors/vendors/vendors.ts`. Every one of these
-is on the forbidden list in `AGENTS.md` (§ Anti-patterns). The right-hand column
-is a hook **confirmed present in the React source today**:
+is on the forbidden list in `AGENTS.md` (§ Anti-patterns) — but each was a
+reasonable choice against an app that exposed no better hook at the time. The
+right-hand column is what exists in the React source **today**:
 
 | Cypress selector | Why it breaks | Verified replacement | Source file |
 |---|---|---|---|
@@ -115,13 +223,18 @@ What must go is the `:eq(0)` / `.ag-row-first` / `:nth-child` wrapping. Rows
 should be located by cell text scoped inside `getByRole("grid")`, never by index.
 See §4.4.
 
-### 3.2 The page objects compensate for instability with retry scaffolding
+### 3.2 Cypress has no auto-waiting parity, so the page objects carry retry scaffolding
 
 `cypress/support/page_objects/vendors/vendors.ts` contains `cy.wait(1000)`,
-conditional `cy.get("body").then($body => $body.find(...))` branching, a literal
+conditional `cy.get("body").then($body => $body.find(...))` branching, a
 "retrying toggle click" fallback, and an explicit retry counter
-(`search(vendor, retries = 12)`). These are flake-suppression wrappers. Porting
-them carries the instability across rather than fixing it.
+(`search(vendor, retries = 12)`).
+
+These were rational workarounds — Cypress retries assertions but not arbitrary
+interaction sequences, so defensive scaffolding was the available tool.
+Playwright's web-first assertions and auto-waiting make them unnecessary, which
+is precisely why they must **not** be ported: carried across, they would
+re-introduce the timing dependence the platform change removes.
 
 ### 3.3 The dominant flake cause is auth, not selectors
 
@@ -129,8 +242,11 @@ them carries the instability across rather than fixing it.
 
 > `Timed out retrying after 30000ms: login form or authenticated app loaded: expected false to equal true` — *This error occurred while creating the session.*
 
-That is `cy.session` failing, and it takes down entire unrelated scenarios
-(change orders, purchase orders, etc.). No amount of selector translation helps.
+That is `cy.session` failing at the framework level, and it takes down entire
+unrelated scenarios (change orders, purchase orders, etc.). It is not something
+a test author can fix from inside a scenario, and no amount of selector
+translation helps — which is why §4.2 (storage-state auth) is a Phase 0 blocker
+rather than a nice-to-have.
 
 ### 3.4 The `@setupEnvironment` orchestrator is a second systemic flake source
 
@@ -141,17 +257,22 @@ tagged `@setupEnvironment` fails in the background step regardless of what it
 tests. The source repo's own `docs/self-heal-known-issues.md` documents this as
 its top two known failure signatures.
 
-**Do not port this pattern.** Environment config drift should be a separate
-monitoring concern, not a precondition wired into scenario execution.
+**Do not port this pattern** — but keep the insight behind it. Environment
+config drift genuinely does break test runs; the problem is that asserting it
+inside a scenario precondition converts an infrastructure event into hundreds of
+unrelated test failures. It belongs in monitoring, owned separately, where a
+flipped flag raises one alert instead of a red suite.
 
-### 3.5 Known-bad tests are already labelled as such
+### 3.5 The suite already tells you which tests not to trust
 
 - `docs/tests_status.md` is a pass/fail ledger; roughly half the payment-run rows read "Failing".
-- `cypress/e2e/expenses/expenses.feature` contains scenarios literally titled
+- `cypress/e2e/expenses/expenses.feature` contains scenarios explicitly titled
   `FLAKY Deleting a receipt` and `FLAKY Upload a new receipt`.
 
-Use this as the triage input. Do not port red tests without first deciding
-whether each is an app bug or a bad test.
+This is unusually good hygiene and it is doing real work here: it is the triage
+input for Phase 1. Do not port a red test without first deciding whether it
+reflects an application bug or a test that needs rethinking — a judgement call
+that needs the original author's context, not a tool.
 
 ### 3.6 Grid state persists in localStorage — a Cypress-only flake source
 
