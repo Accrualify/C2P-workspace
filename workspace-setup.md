@@ -50,9 +50,9 @@ You do **not** have to use this layout — step 3 covers pointing at wherever yo
 clones actually live. But if you already have the Accrualify repos checked out
 somewhere, note the paths now.
 
-> `accrualify-angularjs` is deliberately **not** included. Login is the only
-> Angular surface still in scope, and `LoginPage.ts` already implements it. Add
-> it later if legacy admin screens come into scope.
+> The selected E2E uses **React for every application page, including login**.
+> The Angular source is not required for that flow. Add it separately when
+> reviewing legacy coverage; it is not an allowed fallback for the React E2E.
 
 ---
 
@@ -145,6 +145,44 @@ workflow rests on.
    — the strategy, and §0 for exactly where things stand.
 2. [migration-execution-plan.md](migration-execution-plan.md) — what to do next.
 3. `corpay-playwright/AGENTS.md` — the repo's conventions contract.
+
+---
+
+## 7. Optional Rails Console MCP authentication
+
+Register the sibling `rails-console-mcp` clone through **MCP: Open User
+Configuration** to make it available across local repositories in the same
+VS Code profile. The clone does not need to be a workspace folder.
+
+The MCP process running successfully does **not** mean AWS is authenticated.
+It delegates to the AWS CLI and opens a Rails console lazily on the first
+execution. AWS sign-in belongs in the terminal/browser, not in chat, MCP
+configuration, or test credentials. Application/Active Admin login is separate.
+
+Use the organization's approved authentication method and a separate named
+AWS profile for each intended environment. Obtain account, region, role, and
+access-portal details through approved internal channels; do not guess them or
+publish them in this repository. Do not overwrite another environment's profile.
+
+Complete sign-in in the terminal/browser, then verify that the profile belongs
+to the intended environment. If access is unavailable, request it from the AWS
+administrator rather than substituting a different environment. Only after
+verification, select that profile in the corresponding user-level MCP mapping,
+preserving all other servers and mappings. No AWS keys or tokens belong in MCP
+configuration, source control, or chat.
+
+Use **MCP: List Servers** to restart `rails-console`, then ask Copilot to execute
+`RUBY_VERSION` in the intended environment with `mode: "read"`. Successful STS
+authentication alone does not prove ECS Exec access: the role must also be
+authorized for the target service, and that service must have an Exec-enabled
+running task. Resolve access/target errors before attempting any writes.
+
+Company-specific React/legacy switching follows the
+[company and page setup procedure](migration-execution-plan.md#company-and-page-setup-through-rails-console-mcp).
+Keep the approved test-company and account assignments unchanged. Authenticate,
+verify the exact company and page controls, and reserve an exclusive run window
+before applying or restoring any flag changes. Store actual company/user IDs,
+flag snapshots, and restore records in the private operational handoff.
 
 ---
 
