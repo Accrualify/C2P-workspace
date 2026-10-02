@@ -841,6 +841,35 @@ Per PR:
 - [ ] Banned-pattern scan clean: `waitForTimeout`, `setViewportSize`, `xpath=`,
       `nth-child`, `:eq(`, `.css-`, `console.log`, `process.env.` outside `utils/env.ts`.
 
+### Phase 3 status (2026-10-02)
+
+Domains migrated React-only so far, each accepted on QA with
+`--repeat-each=3 --workers=1 --retries=0`:
+
+- Expenses, cards and the expense dashboard; vendors and the vendor portal
+  (merged).
+- Purchase orders, PO requests and change orders (ready for review), then
+  invoices, credit memos and payments (draft PRs stacked in that order, to be
+  merged together).
+- Payments, in three PRs (payment runs; payments list and details; forms and
+  settings): 106 of 183 payments cases run React-only, and the stack keeps
+  every existing case (720 before, 721 after). Of the 77 still `@incomplete`,
+  51 did not run in Cypress either (incomplete or manual there), 2 need an
+  EFT/EDI transfer that QA lacks, 16 are blocked by QA environment problems
+  (the NVP company's purchase order approval and Submit Pay Now both return a
+  server error), and 8 need React fixes. The 24 blocked cases are tracked in
+  Jira and stay on the owned Cypress remainder until fixed.
+- Payments business clock: the failures "after 4 PM" came from React dating
+  Submit All payments with the browser's local date, which is a day ahead of
+  the Pacific business day on a UTC runner from 4 PM PST / 5 PM PDT (on an
+  Eastern runner from 9 PM Pacific). The payment scenarios and the base E2E
+  now run the browser on Pacific time and type Pacific dates. With the runner
+  clock in UTC during the Pacific evening they passed 129/129, and the base
+  E2E 3/3. The 4 PM Pacific processing-day cutoff does not move these
+  payments.
+- Why the payments tests are built as they are:
+  `corpay-playwright/docs/payments.md`.
+
 ---
 
 ## Stage 4 — Hardening and cutover
@@ -879,6 +908,54 @@ Per PR:
    of it; `corpay-playwright/docs/self-healing-tests-plan.md` already scopes the
    Playwright equivalent if it's wanted.
 
+### Parallel runs: race conditions and polluted data (2026-10-02)
+
+Item 2 above, made concrete. The register lives in
+`corpay-playwright/docs/parallel-safety.md` (PS-1 to PS-10). It covers more
+workers, shards, several cases of one feature file at once (`fullyParallel`
+is on), and other runs on the same companies (Cypress, CI, manual). Summary:
+
+- **Race conditions:**
+  1. Company settings are written back whole (High). Scenarios that change
+     company settings restore the whole snapshot they took, so overlapping
+     ones undo each other's changes and fail their read-back check. Cypress's
+     company default hook counts as an overlap.
+  2. Approval lists show one page (Medium). The React payment and credit memo
+     approval lists load only the first 25; a record can drop off when many
+     await the same approver.
+  3. QA slows down under load (Medium). The waits were sized for one worker.
+  4. NVP payment runs wait for the payment provider (Medium, not measured).
+  5. NVP credit memo linking (Medium, not seen). The NVP company applies
+     vendor credits automatically, and the application can link available
+     credit memos to other runs; so far this has not changed a test's
+     payments.
+  6. Read-only payment scenarios pick the newest matching payment (Medium),
+     which can be another scenario's payment that its cleanup deletes.
+  7. Many sessions for one user: fine on QA; on Stage, about 8 concurrent runs
+     from one machine triggered the bot-protection challenge on every page.
+  8. Low: payment numbers come from the clock, and the payment run layout
+     cases read the first listed run.
+  9. Outside payments: the vendor portal banking scenarios share one account
+     (each removes all payment methods, adds one and expects exactly one).
+- **Polluted data already on QA:**
+  - The base E2E has no cleanup: each run leaves a vendor, a purchase order, a
+    paid invoice and an available credit memo (roughly 40 of each on QA).
+  - Old available credit memos from earlier suites on the NVP test vendor.
+  - A long payment approvals queue for the staff user, of which React shows
+    25.
+  - Before the business clock fix, evening failures left payments scheduled
+    for the next day; the ones found were deleted.
+- **Until parallel execution is designed:** acceptance stays at one worker,
+  with no overlapping runs on the same company. After a failed or interrupted
+  run, check for leftover test records and next-day scheduled payments before
+  the next run.
+- **Before raising workers:** serialise or lock the settings-changing
+  scenarios and restore only the keys they change; give each worker its own
+  approver; keep read-only pickers off test-owned records; use random payment
+  numbers; check NVP credit linking with two overlapping NVP credit memo
+  cases; measure QA at 2, 4 and 8 workers; keep Stage concurrency low unless
+  the runner is allowlisted; decide the base E2E cleanup (decision #24).
+
 **Exit gate**
 - [ ] Agreed scope covered and green in comparable scheduled CI runs for the approved observation window, with exact counts and zero retries/skips.
 - [ ] Reviewed source-to-target assertion map accounts for every behaviour being retired; a reduced pilot does not count as full source equivalence.
@@ -912,6 +989,12 @@ Decisions and remaining open questions, to be updated as the work proceeds.
 | 16 | Scheduled evidence before Cypress retirement | Before Stage 4 retirement | Pending approval: recommend three consecutive scheduled Stage acceptance runs with comparable scope/data and strict flags/counts. Confirm the cadence/window and coverage owner; this does not require Cypress parity. |
 | 17 | Batch size and mapped coverage before cutover | Stage 3 / Stage 4 | Review-sized batches within one domain per PR, not whole-domain rewrites. Every batch needs mapped assertions and retry-free evidence; retire only mapped accepted coverage or explicitly approved omissions. |
 | 18 | Rails MCP flag-change owner | Before any affected live run | Decided 2026-09-25: the other Rails MCP chat owns reviewed company-scoped page-flag changes and restoration. This implementation chat publishes requirements and consumes the snapshot/delta/effective-state/run-window handoff; no duplicate writer or assumption that a baseline means flags are applied. |
+| 19 | React-only scope for every test | Stage 2 onward | Decided 2026-09-26 (user): the E2E and **all** other tests use React only (React login and React pages; no Angular page objects, login, origins, or fallback). `@angular` marks every scenario still depending on Angular, including the legacy login. They are the Stage 3 repair backlog and never accepted; accepted selections exclude `@angular`. Behaviour React cannot yet perform stays on the owned Cypress remainder with a React-gap ticket. |
+| 20 | Company settings changed by tests | Before settings-changing slices | Decided 2026-09-28 (user): save the company fields and `company/default` as found, apply the Cypress `setCompanyDefaultSettings` baseline before each scenario, then restore and verify as found afterwards, pass or fail (`companySettings` fixture). |
+| 21 | QA reference data for the Department, Location and Project scenarios | Before accepting those 5 admin-expense scenarios | Open: the staff test company has no departments, locations or projects on QA, so React never renders those pickers. Adding them changes other forms for every test; decide between owned reference data and keeping the scenarios `@incomplete`. |
+| 22 | Card setup for the two card-linked receipt scenarios | Before accepting "OCR matching against a cleared transaction" and "manually linking a receipt to a card purchase" | Open: Cypress issues a card through the API, then either marks every unmatched QA card transaction as matched or changes a card auto-create setting. Both change shared data; decide whether to allow them (with restore) or keep the scenarios `@incomplete`. |
+| 23 | Parallel execution: race conditions and shared state | Before raising `--workers`, adding `--shard`, or overlapping runs on one company | Open: register in `corpay-playwright/docs/parallel-safety.md` (summary under Stage 4). Acceptance stays at one worker. Highest risks: company settings written back whole, approval lists that show one page, and QA load. |
+| 24 | Base E2E leftovers | Before scheduled or parallel runs | Open: the base E2E deletes nothing, and QA holds roughly 40 of each record type it creates (2026-10-02). Decide between cleanup in the scenario (paid invoices in closed runs and their closed purchase orders can be deleted) and a periodic sweep. |
 
 ### Company and page setup through Rails Console MCP
 
