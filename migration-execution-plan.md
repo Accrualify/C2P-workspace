@@ -811,7 +811,7 @@ account/data safety gate before its first live run.
 | 1 | Vendors | Proves out `AgGrid`. Account allocation and failure-restoration proof required before role changes or writes. Vendor-create API contract is unconfirmed; use only approved UI provisioning until supplied. |
 | 2 | Purchase Orders | `POST /purchase_orders` and `/po_requests` both confirmed. Capture a real request body first. |
 | 3 | Invoices | Best seeding story — `POST /invoices` with a fully typed payload. Large (~60 scenarios). |
-| 4 | Credit Memos | Depends on invoice seeding from slice 3. Use the deployed React equivalent where supported; document and ground any genuinely unavailable React capability before using a legacy exception. |
+| 4 | Credit Memos | Depends on invoice seeding from slice 3. Use the deployed React pages only; record any genuinely unavailable React capability as a gap and keep the affected scenario in the backlog (decision #19). |
 | 5 | Users / Subsidiaries | **Gated on blocker #4** — no user-create endpoint is visible client-side. |
 | 6 | Payments | Largest and most red. 16 feature files. Last, once everything else is proven. |
 | — | Expenses, Cards, Approvals, Dashboard, Reports, Profile, Administration | Sequence by business priority. |
