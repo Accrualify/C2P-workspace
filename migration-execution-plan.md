@@ -63,6 +63,38 @@ Use review-sized batches within one domain per pull request, not a whole domain
 in one large PR. Each batch has a bounded behaviour/assertion map and its own
 acceptance evidence. Human review on every one, at least through Stage 3.
 
+### Branching and merging (decided 2026-10-02)
+
+Every migration PR targets `main` in `corpay-playwright`, where the review gate
+is one approval, every conversation (including Copilot's) resolved, and the
+offline CI checks. `cypress-to-playwright-migration` had no rules, reviews or
+CI, and was never merged into `main`, so it is retired after one catch-up PR.
+
+1. Branch each slice from the latest `main` and open its PR against `main`.
+2. Merge with **Create a merge commit**. Squash only a PR that no other branch
+   is built on.
+3. After a PR merges, merge `main` into every in-flight branch
+   (`git merge origin/main`) and run `tsc --noEmit`, `bddgen` and
+   `npm run test:offline`. Re-run the affected scenarios when the merge touched
+   shared code (fixtures, shared page objects, `utils/env.ts`, the runner).
+   Then point the PR at `main`.
+4. If a PR was squash-merged anyway, do not merge `main` into branches built on
+   it: that can silently undo their own removals. Replay only their own commits
+   with `git rebase --onto origin/main <old base head> <branch>`. Either way,
+   diff the result against the branch head; only the expected files may differ.
+5. Stacks are the exception, at most two deep: the upper PR is a draft against
+   the lower PR's branch. Merge the lower PR first, then point the upper PR at
+   `main` (step 3) before merging it. With "Automatically delete head branches"
+   on, GitHub retargets it when the lower PR merges. On 2026-10-02 three
+   stacked PRs were merged in order without retargeting, so the upper two
+   landed in their stacked base branches instead of the migration branch.
+
+**Catch-up (one-off):** re-land those two PRs on the migration branch, then
+merge `main` into it. `main` gained four PRs after the branches diverged (an
+earlier reconciliation was lost when its PR was squash-merged), and a trial
+merge conflicts in 12 files. Land the result in `main` with a merge commit,
+then retarget the open migration PRs to `main`.
+
 ### Migration scope decision (2026-09-21)
 
 **Implementation update (2026-09-23):** The user approved strict QA-default
@@ -995,6 +1027,7 @@ Decisions and remaining open questions, to be updated as the work proceeds.
 | 22 | Card setup for the two card-linked receipt scenarios | Before accepting "OCR matching against a cleared transaction" and "manually linking a receipt to a card purchase" | Open: Cypress issues a card through the API, then either marks every unmatched QA card transaction as matched or changes a card auto-create setting. Both change shared data; decide whether to allow them (with restore) or keep the scenarios `@incomplete`. |
 | 23 | Parallel execution: race conditions and shared state | Before raising `--workers`, adding `--shard`, or overlapping runs on one company | Open: register in `corpay-playwright/docs/parallel-safety.md` (summary under Stage 4). Acceptance stays at one worker. Highest risks: company settings written back whole, approval lists that show one page, and QA load. |
 | 24 | Base E2E leftovers | Before scheduled or parallel runs | Open: the base E2E deletes nothing, and QA holds roughly 40 of each record type it creates (2026-10-02). Decide between cleanup in the scenario (paid invoices in closed runs and their closed purchase orders can be deleted) and a periodic sweep. |
+| 25 | Branching and merge strategy | Before the next PR | Decided 2026-10-02: every PR targets `main` and merges with a merge commit; after each merge, merge `main` into the in-flight branches; stacks at most two deep and retargeted to `main` before merging; `cypress-to-playwright-migration` is retired after one catch-up PR. See "Branching and merging" under How the work runs. |
 
 ### Company and page setup through Rails Console MCP
 
