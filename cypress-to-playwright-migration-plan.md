@@ -1,6 +1,6 @@
 # Migration Plan: Accrualify Cypress suite → Corpay Playwright
 
-**Status:** Phase 0 complete (not yet executed live)
+**Status:** Historical design snapshot; current implementation status is in the execution plan
 **Date:** 2026-09-19 (rev. 3 — progress recorded, blockers listed)
 **Source repo:** `accrualify-test-automation` (Cypress + cypress-cucumber-preprocessor)
 **Target repo:** `corpay-playwright` (Playwright + playwright-bdd)
@@ -10,9 +10,39 @@
 > For the sequenced work from here to the finish line, see
 > [migration-execution-plan.md](migration-execution-plan.md).
 
+> **Current decisions (2026-09-25):** Stage 0 foundations are checkpointed with
+> local verification; live acceptance remains separate. Stage 1 repairs the
+> existing base E2E using React for every application page, including login,
+> with full UI credential entry in a fresh context. Stage 2 completes the
+> source-to-target coverage inventory before broader migration. CI provider
+> choice and QA/Stage usage remain undecided. These decisions override the
+> historical phase numbering, saved-session recipes, and Angular-login scope
+> below. Environment snapshots and operational flag profiles remain private.
+
+> **Update 2026-09-22:** The completion claims and blockers below describe the
+> 2026-09-19 snapshot, not the current checkout. The execution plan records
+> today's baseline and successful local Stage foundation checks. Its
+> 2026-09-21 decisions supersede the saved-session BDD design, parallel
+> migration execution, and mandatory Cypress overlap described here. Use
+> full UI login per authenticated scenario and sequential validation; do not
+> restore the historical auth design. Stage 0 is not yet signed off.
+
+> **Review update 2026-09-23:** The execution plan now brings existing-port
+> reconciliation, active instructions, missing foundations, and deployed-version
+> evidence into Stage 0. Preliminary inventory can run alongside it as read-only
+> analysis. Establish isolation and prove UI login/API authentication in the same
+> scenario before a deterministic, coverage-preserving pilot. Use review-sized
+> batches within each domain, with mapped assertions and retry-free acceptance
+> before cutover. A smaller search-only pilot requires explicit approval and is
+> not equivalent to the source create-and-approve scenario. Both local library
+> declarations are `1.2.4`; the old 1.2.2/1.2.3 mismatch is obsolete. This review
+> is static: no new live Stage results, deployed revisions, or successful CI
+> execution were verified. The dated prior foundation evidence is not broader
+> acceptance. Historical recipes below do not override the execution plan.
+
 ---
 
-## 0. Status — where we are right now
+## 0. Historical status (2026-09-19)
 
 > ⚠️ **Nothing in `corpay-playwright` has ever been executed against a live
 > environment.** There is no `.env` in the repo, so no scenario has ever run.
@@ -481,9 +511,11 @@ primary source of truth for component-level hooks.
 3. Toast has a `data-testid` but **no `role="alert"` / `role="status"`** in the
    React app's `notifications.jsx` usage, even though the library's `Toast`
    supports those roles. Worth aligning.
-4. **Version skew:** the library repo is at 1.2.2; `accrualify-reactjs` consumes
-   1.2.3. Confirm the local clone matches the deployed version before trusting it
-   as ground truth.
+4. **Deployed-version evidence:** the local library package and
+   `accrualify-reactjs` dependency both read **1.2.4**, verified 2026-09-23.
+   The earlier local mismatch is resolved. Separately verify the deployed app
+   build and bundled library revision before accepting affected selectors;
+   matching local declarations do not prove what Stage is running.
 
 Deliverable: a running list of missing hooks produced as a by-product of Phase 2
 (fed by the §4.5 stop condition), plus one batched upstream PR per repo rather
@@ -494,7 +526,11 @@ than one PR per scenario.
 ## 5. Phase 1 — Triage inventory
 
 Produce a machine-generated porting checklist before writing any test code.
-Runs in parallel with Phase 0.
+Preliminary read-only inventory runs alongside Stage 0 reconciliation; complete
+the pilot's source-to-existing-target assertion map before implementation.
+Broader scope decisions are signed off in Stage 2 of the execution plan, using
+the same inventory. Its existing-target mapping and Unknown-evidence rules
+supersede the historical three-source recipe below.
 
 Join three sources:
 1. Every scenario in `accrualify-test-automation/cypress/e2e/**/*.feature`
@@ -523,8 +559,10 @@ defers are removed.
 
 ## 6. Phase 2 — Vertical slices
 
-One feature area per pull request. Within an area, port scenarios in inventory
-order (green first).
+Use review-sized batches within one domain per pull request. A domain can span
+multiple PRs; each batch must have a bounded source-to-target assertion map and
+independently reviewable setup, cleanup, and retry-free acceptance evidence.
+Within a domain, follow the agreed inventory order, verified passing cases first.
 
 ### Recommended order
 
@@ -573,15 +611,18 @@ replacement table, not extend it.
 
 ## 7. Phase 3 — Hardening and cutover
 
-1. Add the ported tag to the CI workflow (`.github/workflows/playwright.yml`) as
-   it lands, so coverage grows incrementally rather than in one cutover.
-2. Run both suites in parallel for an agreed overlap window. Compare results per
-   scenario; investigate any case where Playwright passes and Cypress fails, or
-   vice versa.
-3. Retire the corresponding Cypress feature only after its Playwright equivalent
-   has been green in CI for the agreed window.
-4. Land the batched test-hook PRs from §4.6 upstream, so the next wave of porting
-   has fewer gaps.
+1. Add only the accepted batch selection to Stage CI as it lands, with exact
+   counts and `--workers=1 --repeat-each=3 --retries=0`; a domain tag can include
+   unaccepted mutations. Workflow changes still require approval.
+2. Collect comparable scheduled Playwright evidence for the approved observation
+   window. A mandatory Cypress overlap or matching pass/fail results is not
+   required. Do not overlap suites that depend on shared mutable resources.
+3. Retire corresponding Cypress coverage only after the source-to-target
+   behaviour/assertion map, retry-free acceptance, scheduled evidence, and
+   coverage-owner approval are complete. Keep any required uncovered behaviour
+   in an explicitly owned remainder; a smaller pilot is not full replacement.
+4. Finish only non-blocking hook improvements here. Required hooks must already
+   have landed and been deployed before acceptance of the affected batch.
 5. Port the self-heal pipeline last, if at all. The source repo's
    `scripts/self-heal/` tooling is substantial and `corpay-playwright/docs/self-healing-tests-plan.md`
    already scopes the Playwright equivalent. Treat it as a separate project —
@@ -627,13 +668,18 @@ Per phase:
   to the documented source repos.
 - The batched test-hook PRs from §4.6.
 - CI workflow additions for newly ported tags.
+- Company-scoped React/legacy page setup through Rails Console MCP on the
+  existing test companies, following the safeguards in decision 6 below.
 
 **Out of scope**
-- The Rails API source. The React app covers endpoint paths, auth, and the
+- General Rails API source exploration or changes. The React app covers endpoint paths, auth, and the
   invoice payload; it does **not** cover server-side validation, the
   purchase-order payload schema, or vendor/user creation. Those need a backend
-  engineer or a captured request body (§4.3).
-- Porting `setupEnvironment` / feature-flag assertions (§3.4). Needs a separate design.
+  engineer or a captured request body (§4.3). Decision 6 permits only the relevant
+  Rails feature-flag/module-setting inspection needed for MCP page setup, not
+  broader backend development or API-contract discovery.
+- Porting `setupEnvironment` / hardcoded feature-flag assertions (§3.4). This
+  remains separate from the approved MCP-controlled page setup in decision 6.
 - Porting the `scripts/self-heal/` pipeline (§7.5).
 - Fixing app bugs surfaced by "Defer"-classified tests. File tickets instead.
 - The external testmail.app email-verification commands — decide separately whether
@@ -675,20 +721,23 @@ Per phase:
    or a longer autonomous loop? *Recommendation: per-feature with review, at least
    through slices 1–3, until the prompt contract is proven.*
 
-6. **Companies under test.** Cypress hardcodes "Automation Client 1" and
-   "Automation Client NVP" with different feature-flag and workflow expectations.
-   Does the Playwright suite need the same multi-company matrix?
+6. **Companies under test (decided 2026-09-24).** Keep scenarios on their existing
+  approved test companies, with their existing users and credentials. Do not
+  move scenarios or remap credentials to obtain
+  React or legacy pages. Use Rails Console MCP to apply the reviewed,
+  company-scoped page-flag selection before an exclusive test batch. Confirm
+  environment and exact company IDs, capture prior override state, check
+  user-level overrides and related module settings, and verify the effective
+  page selection after fresh UI login. Never change global defaults or toggle
+  flags during a conflicting Cypress, Playwright, CI, or manual run. Restore
+  the captured state after the batch, including failures and originally absent
+  overrides; interrupted cleanup blocks the next conflicting run. See the
+  execution plan's company/page setup procedure. This decision does not itself
+  change live flags or authorize unrelated company configuration changes.
 
-7. **Component library version skew.** The library repo is at 1.2.2;
-   `accrualify-reactjs` consumes 1.2.3. Should the local clone be updated before
-   it is used as selector ground truth?
-
-8. **Angular repo.** `accrualify-angularjs` is not in the workspace. Add it, or
-   accept that Angular-side grounding stays on the remote `githubRepo` tool?
-
-7. **Component library version skew.** The library repo is at 1.2.2;
-   `accrualify-reactjs` consumes 1.2.3. Should the local clone be updated before
-   it is used as selector ground truth?
+7. **Deployed component-library version.** Both local declarations now read
+   **1.2.4**; no local mismatch remains. Who can provide the deployed app/build
+   and bundled library revision so Stage 0 can record verified release evidence?
 
 8. **Angular repo.** `accrualify-angularjs` is not in the workspace. Add it, or
    accept that Angular-side grounding stays on the remote `githubRepo` tool?
