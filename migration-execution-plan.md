@@ -492,7 +492,7 @@ This public overview is a coverage contract, not accepted runtime evidence.
 | `E2E-12` | Keep each lifecycle independently runnable. | Use test-scoped state, semantic waits, shared grid helpers, and verified cleanup or compensation after success/failure. |
 
 **First local implementation slice:** the E2E API wrapper now uses the existing
-[current-session factory](../corpay-playwright/api/clients/apiClient.ts#L6).
+current-session factory in `corpay-playwright/api/clients/apiClient.ts`.
 It waits for the active origin's token and matching company rather than scanning
 other origins or borrowing saved authentication. All **15 existing session-auth
 regressions pass**. TypeScript, scoped Prettier, and QA-configured BDD generation
@@ -715,7 +715,7 @@ this one scenario with `--workers=1 --repeat-each=3 --retries=0` through the
 shared reporting runner. Confirm the exact selection with `--list` first.
 
 **Exit gate**
-- [x] E2E is selected as the first target; React is preferred wherever supported, using the existing automation companies and named-user identities.
+- [x] E2E is selected as the first target, using the existing automation companies and named-user identities. It is React-only on every page, including login, with no Angular fallback.
 - [ ] E2E controlled data, approvals, sandbox payment destinations, provisioning, and recovery agreed before execution.
 - [ ] Isolation and same-scenario UI login/API authentication proven before pilot validation.
 - [ ] Existing E2E target reused/repaired; every source precondition, approval, relationship, and final status assertion mapped.
@@ -981,7 +981,7 @@ Decisions and remaining open questions, to be updated as the work proceeds.
 | 8 | Port the self-heal pipeline at all? | Stage 4 | Open |
 | 9 | BDD authentication model | Stage 0 | Decided 2026-09-21: full UI login per scenario requiring authentication; no saved-session reuse or separate anonymous lane |
 | 10 | Migration validation versus parallel-execution design | Stages 0-3 / Stage 4 | Sequential migration validation and no conflicting overlap remain required; strict acceptance adds zero retries and exact counts. Basic account/data safety applies now; only parallel-execution tooling is deferred. No mandatory Cypress overlap window. |
-| 11 | First migration target | Stage 1 | Decided 2026-09-24: base E2E payment lifecycle, reusing/repairing the existing port with React wherever supported. This replaces the vendor-search pilot. Confirm the lifecycle's controlled data, approval paths, safe payment destinations, flag profile, and cleanup/compensation before live execution. |
+| 11 | First migration target | Stage 1 | Decided 2026-09-24: base E2E payment lifecycle, reusing/repairing the existing port. React-only on every page, including login, with no Angular fallback (updated 2026-09-25, see #14). This replaces the vendor-search pilot. Confirm the lifecycle's controlled data, approval paths, safe payment destinations, flag profile, and cleanup/compensation before live execution. |
 | 12 | CI provider, QA/Stage usage, and integration | Before hosted live CI acceptance; not local Phase 0 | Updated 2026-09-25: provider choice and QA/Stage usage, schedules, and required checks remain undecided. Retain GitHub Actions and AWS CodePipeline/CodeBuild as options. PR/push checks are offline-only; live GitHub runs require explicit manual `run_live` opt-in. No AWS deployment or live dispatch is part of the foundations PR. Verify the chosen live integration when work resumes. |
 | 13 | Dedicated Okta/TOTP case | Stage 0 | Decided 2026-09-25 by the user: exclude due to setup issues; retain with `@skip @incomplete`. No Okta/MFA setup or dummy password provisioning is required. Five ordinary login cases plus one protected-page case remain the six-case/18-execution foundation; normal full UI login is unchanged. |
 | 14 | React-only E2E including login | Before any E2E acceptance | Updated by the user 2026-09-25: all application pages, including login and post-login landing, must use React. No Angular exception or fallback; missing React capability blocks the affected action. Preserve full UI credential entry and current-session API authentication. This supersedes the earlier Angular-login allowance. |
